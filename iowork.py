@@ -18,6 +18,8 @@ def read_all_files(directory='data/cabspottingdata'):
         for file in files:
             if 'new_' and '.txt' in file:
                 file_list.append(os.path.join(root, file))
+            elif 'new_' and '.temp' in file:
+                file_list.append(os.path.join(root, file))
     
     return file_list # return epfl/mobility files found in root directory
 
@@ -94,22 +96,24 @@ def print_data(directions):
         direction_out += "Min duration: {}\n".format(directions[i]['min_duration'])
         direction_out += "Max free time: {}\n".format(directions[i]['overview_free_time'])
         try:
-            direction_out += "Downloaded POI types: {}\n".format(directions[i]['place_type'])
+            direction_out += "Downloaded POI types: {}\n".format(directions[0]['place_type'])
         except:
             direction_out += "Downloaded POI types: Not specified\n"
         try:
-            direction_out += "Selected POI types: {}\n\n".format(directions[i]['filtered_poi'])
+            direction_out += "Selected POI types: {}\n\n".format(directions[0]['filtered_poi'])
         except:
             direction_out += "Selected POI types: Not specified\n"
-        direction_out += "No stop probability is: {}\n".format(round(directions[i]['no_stop_prob'], 2))
+        direction_out += "No stop probability is: {}\n".format(round(directions[i]['entropy_data']['no_stop_prob'], 2))
+        direction_out += "Weighed stop probability is: {}\n".format(round(directions[i]['entropy_data']['weighed_no_stop'], 2))
         try:
             direction_out += "Amount of potential POIs: {}\n".format(len(directions[i]['all_destinations']))
         except KeyError:
             direction_out += "No of potential POIs are presented\n"
-        for prob in range(len(directions[i]['normal_prob'])):
-            directions[i]['normal_prob'][prob] = round(directions[i]['normal_prob'][prob],3)
-        direction_out += "Normalized probabilities of visit POI: {}\n".format(directions[i]['normal_prob'])
-        direction_out += "Entropy: {:.2f}\n\n".format(directions[i]['direction_entropy'])
+        for prob in range(len(directions[i]['entropy_data']['normal_prob'])):
+            directions[i]['entropy_data']['normal_prob'][prob] = round(directions[i]['entropy_data']['normal_prob'][prob],3)
+        direction_out += "Normalized probabilities of visit POI: {}\n".format(directions[i]['entropy_data']['normal_prob'])
+        direction_out += "Ellipse area: {}\n".format(directions[i]['ellipse_area'][i])
+        direction_out += "Entropy: {:.2f}\n\n".format(directions[i]['entropy_data']['direction_entropy'])
 
         direction_out += "In detail:\n"
         try:

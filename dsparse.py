@@ -56,7 +56,7 @@ def sort_file(filename):
 
 
 def get_coor_between(data, time_interval):
-    """get coordinates from file return only coordinates in 10 min time interval"""
+    """get coordinates from file return only coordinates in X seconds time interval"""
 
     if not data:
         return
@@ -66,7 +66,7 @@ def get_coor_between(data, time_interval):
     orig_poly = {}
     for direct in data:
         if len(path) > 1:
-            list_arg = {'path':path, 'original_polyline': orig_poly['points']}
+            list_arg = {'path':path, 'original_polyline':{'points': orig_poly['points']}}
             directions.append(list_arg)
         path = []
         last_time = '0'
@@ -74,13 +74,14 @@ def get_coor_between(data, time_interval):
             if last_time == '0':
                 last_time = line['time']
                 path.append(line)
-                orig_poly = {'poly': direct['overview_polyline']}
-            if (int(line['time']) - int(last_time) > time_interval*time_gap):
-                if (int(line['time']) - int(last_time) < time_interval*(time_gap+1)):
-                    if time_gap >= 120:
+                orig_poly = {'points': direct['overview_polyline']['points']}
+                time_gap = 1
+            if (int(line['time']) - int(last_time) > time_interval*time_gap):  # if time of the line is more than time_interval
+                if (int(line['time']) - int(last_time) < time_interval*(time_gap+1)): # but still not exceeds time_interval+gap
+                    if time_gap >= 61:
                         time_gap = 1
                         last_time = line['time']
-                        list_arg = {'path':path, 'original_polyline': orig_poly['points']}
+                        list_arg = {'path':path, 'original_polyline':{'points': orig_poly['points']}}
                         directions.append(list_arg)
                         path = []
                         path.append(line)
@@ -90,7 +91,7 @@ def get_coor_between(data, time_interval):
                 elif (int(line['time']) - int(last_time) > time_interval*(time_gap+1)):
                     time_gap = 1
                     last_time = line['time']
-                    list_arg = {'path':path, 'original_polyline': orig_poly['points']}
+                    list_arg = {'path':path, 'original_polyline':{'points': orig_poly['points']}}
                     directions.append(list_arg) 
                     path = []
                     path.append(line)
@@ -136,31 +137,45 @@ def get_busy_directions(data):
     return directions
 
 
-def get_all_directions(data):
-    """get directions for busy and not busy times and convert them to ACSPrivacy format"""
+def get_all_directions(data, split_by=0):
+    """get directions for busy and not busy times and convert them to CSPrivacy format
+        split_by: 0 - only busy or only free times paths, 1...n - get path contains number of lines"""
 
     if not data:
         return
     path = []
     directions = []
-    last_busy = '0'
+    
+    if split_by == 0:
+        last_busy = '0'
+        for line in data:
+            if line['busy'] == '1':
+                if last_busy == '0':
+                    directions.append({'path':path})
+                    path = []
+                    last_busy = '1'
+                path.append(line)
+                continue
+            if line['busy'] == '0':
+                if last_busy == '1':
+                    directions.append({'path':path})
+                    path = []
+                    last_busy = '0'
+                path.append(line)
+    elif split_by > 0: 
+        for i, line in enumerate(data):
+            path.append(line)
+            if i == split_by:
+                directions.append({'path':path})
+                path = []
+                split_by += split_by
+    else:
+        print("split_by parameter is negative. Exiting...")
+        exit(1)
 
-    for line in data:
-        if line['busy'] == '1':
-            if last_busy == '0':
-                directions.append({'path':path})
-                path = []
-                last_busy = '1'
-            path.append(line)
-            continue
-        if line['busy'] == '0':
-            if last_busy == '1':
-                directions.append({'path':path})
-                path = []
-                last_busy = '0'
-            path.append(line)
 
     directions[0]['path'][0]['filename'] = data[0]['filename']
+    directions = encode_dataset_polyline(directions) # get polyline for original path
     iowork.save_temp_data(directions, 'all_direct_' + data[0]['filename'])
     print("Coordinates of directions for busy and free times received")
     
@@ -178,7 +193,7 @@ def encode_dataset_polyline(data):
             coordinates = (float(line['lat']), float(line['lon']))
             direct_poly.append(coordinates)
         # add polyline in format of 'main.decodePolylines(directions)'
-        directions.update({'overview_polyline': polyline.encode(direct_poly, 5)}) 
+        directions.update({'overview_polyline': {'points': polyline.encode(direct_poly, 5)}}) 
    
     try:
         data[0]['path'][0]['filename']
@@ -194,16 +209,21 @@ def encode_dataset_polyline(data):
     return data
 
 
-def cut_directions(directions, direct_num, tracking_interval):
+def cut_directions(directions, direct_num, minutes_interval, tracking_interval):
     """cut number of directions while testing"""
     
-    tracking_interval = tracking_interval / 600
+    tracking_interval /= 60 # convert to minutes
+    tracking_interval /= minutes_interval # select number of lines related to tracking_interval depends on minutes interval of input data
     cutted_directions = []
     if direct_num > len(directions):
         direct_num = len(directions)
-    for i in range(direct_num):
+    num_added = 0
+    for i, line in enumerate(directions):
         if len(directions[i]['path']) > tracking_interval: # get only direction that continuos more than tracking_interval 
-            cutted_directions.append(directions[i])
+            cutted_directions.append(line)
+            num_added += 1
+            if num_added == direct_num:
+                break
     if not cutted_directions:
         return False
     else:
